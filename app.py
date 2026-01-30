@@ -429,14 +429,14 @@ def event_mcsi(comp_id):
             'sid': data['sid'],
             'name': data['name'],
             'club': data['club'],
-            'best_mcsi': max(scores),
+            'total_mcsi': round(sum(scores), 2),
             'avg_mcsi': round(sum(scores) / len(scores), 2),
             'shoots': len(scores),
             'disciplines': sorted(data['disciplines'])
         })
 
-    # Sort by best MCSI
-    shooter_list.sort(key=lambda x: x['best_mcsi'], reverse=True)
+    # Sort by total MCSI descending
+    shooter_list.sort(key=lambda x: x['total_mcsi'], reverse=True)
 
     conn.close()
 

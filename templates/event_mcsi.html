@@ -18,16 +18,16 @@
 </div>
 
 <div id="shooters-tab" class="card">
-    <h2>Shooter Rankings (by best MCSI)</h2>
+    <h2>Shooter Rankings (by Total MCSI)</h2>
     <table>
         <thead>
             <tr>
                 <th>Rank</th>
                 <th>Name</th>
                 <th>Club</th>
-                <th>Best MCSI</th>
-                <th>Avg MCSI</th>
+                <th>Total MCSI</th>
                 <th>Strings</th>
+                <th>Avg MCSI</th>
                 <th>Disciplines</th>
             </tr>
         </thead>
@@ -42,9 +42,9 @@
                 </td>
                 <td><a href="/shooter/{{ s.sid }}">{{ s.name }}</a></td>
                 <td>{{ s.club or '-' }}</td>
-                <td><strong>{{ s.best_mcsi }}</strong></td>
-                <td>{{ s.avg_mcsi }}</td>
+                <td><strong>{{ s.total_mcsi }}</strong></td>
                 <td>{{ s.shoots }}</td>
+                <td>{{ s.avg_mcsi }}</td>
                 <td>
                     {% for d in s.disciplines %}
                     <span class="discipline-tag">{{ d }}</span>

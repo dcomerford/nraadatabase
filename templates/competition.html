@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ state_code }} {{ year }} - NRAA Results{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Home</a> &raquo; {{ state_code }} {{ year }}
+</div>
+
+<h1>{{ state_name }} {{ year }}</h1>
+
+<div class="card">
+    <h2>Disciplines</h2>
+    <div>
+        {% for disc in disciplines %}
+        <span class="discipline-tag" title="{{ disc.original }}">{{ disc.normalized }}</span>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>Aggregates</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Aggregate Name</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for agg in aggregates %}
+            <tr>
+                <td>{{ agg.number }}</td>
+                <td>{{ agg.name }}</td>
+                <td><a href="/aggregate/{{ comp_id }}/{{ agg.name }}" class="btn">View Results</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Ranges</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Distance</th>
+                <th>Match</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in ranges[:20] %}
+            <tr>
+                <td>{{ r.distance }}{{ r.unit }}</td>
+                <td>{{ r.match }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if ranges|length > 20 %}
+    <p style="color: #666;">... and {{ ranges|length - 20 }} more ranges</p>
+    {% endif %}
+</div>
+{% endblock %}

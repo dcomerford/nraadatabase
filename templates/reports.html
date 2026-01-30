@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - NRAA Results{% endblock %}
+
+{% block content %}
+<h1>Reports</h1>
+
+<div class="card">
+    <h2>Top Shooters by Discipline</h2>
+    <p>Grand Aggregate winners and podium finishes (minimum 3 entries)</p>
+
+    <select id="discipline-select">
+        <option value="TR-A">Target Rifle - A</option>
+        <option value="TR-B">Target Rifle - B</option>
+        <option value="TR-C">Target Rifle - C</option>
+        <option value="F-Std-A">F Standard - A</option>
+        <option value="F-Std-B">F Standard - B</option>
+        <option value="F-Std-Open">F Standard - Open</option>
+        <option value="F-Open">F Open</option>
+        <option value="FTR">F/TR</option>
+        <option value="Sporter-Open">Sporter Open (incl. Hunter)</option>
+        <option value="Sporter-PC">Sporter PC</option>
+    </select>
+    <button class="btn" onclick="loadTopShooters()">Load Report</button>
+
+    <table id="top-shooters-table" style="margin-top: 20px;">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Club</th>
+                <th>Wins</th>
+                <th>Podiums</th>
+                <th>Avg Score</th>
+                <th>Entries</th>
+            </tr>
+        </thead>
+        <tbody id="top-shooters-body">
+            <tr><td colspan="7" style="text-align:center; color:#666;">Select a discipline and click Load Report</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Discipline Participation Over Years</h2>
+    <p>Number of unique shooters in Grand Aggregates per year</p>
+
+    <button class="btn" onclick="loadDisciplineStats()">Load Report</button>
+
+    <div id="discipline-stats" style="margin-top: 20px;">
+        <table id="discipline-stats-table">
+            <thead>
+                <tr>
+                    <th>Year</th>
+                    <th>Discipline</th>
+                    <th>Shooters</th>
+                </tr>
+            </thead>
+            <tbody id="discipline-stats-body">
+                <tr><td colspan="3" style="text-align:center; color:#666;">Click Load Report to view</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Shot Distribution by Discipline</h2>
+    <p>Distribution of shot values across all strings</p>
+
+    <select id="shot-discipline-select">
+        <option value="TR-A">Target Rifle - A</option>
+        <option value="TR-B">Target Rifle - B</option>
+        <option value="F-Std-A">F Standard - A</option>
+        <option value="F-Open">F Open</option>
+        <option value="FTR">F/TR</option>
+    </select>
+    <button class="btn" onclick="loadShotDistribution()">Load Report</button>
+
+    <div id="shot-distribution" style="margin-top: 20px;">
+        <table id="shot-dist-table">
+            <thead>
+                <tr>
+                    <th>Shot Value</th>
+                    <th>Count</th>
+                    <th>Distribution</th>
+                </tr>
+            </thead>
+            <tbody id="shot-dist-body">
+                <tr><td colspan="3" style="text-align:center; color:#666;">Select a discipline and click Load Report</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadTopShooters() {
+    const discipline = document.getElementById('discipline-select').value;
+    const tbody = document.getElementById('top-shooters-body');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading...</td></tr>';
+
+    try {
+        const response = await fetch(`/api/report/top-shooters?discipline=${discipline}`);
+        const data = await response.json();
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#666;">No data found</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.map((row, i) => `
+            <tr>
+                <td>${i + 1}</td>
+                <td><a href="/shooter/${row.sid}">${row.name}</a></td>
+                <td>${row.club || '-'}</td>
+                <td><strong>${row.wins}</strong></td>
+                <td>${row.podiums}</td>
+                <td>${row.avg_score.toFixed(2)}</td>
+                <td>${row.entries}</td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color:red;">Error loading data</td></tr>';
+    }
+}
+
+async function loadDisciplineStats() {
+    const tbody = document.getElementById('discipline-stats-body');
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Loading...</td></tr>';
+
+    try {
+        const response = await fetch('/api/report/discipline-stats');
+        const data = await response.json();
+
+        // Group by year
+        const byYear = {};
+        data.forEach(row => {
+            if (!byYear[row.year]) byYear[row.year] = {};
+            byYear[row.year][row.discipline] = row.shooters;
+        });
+
+        let html = '';
+        Object.keys(byYear).sort().reverse().forEach(year => {
+            const discs = byYear[year];
+            const first = true;
+            Object.keys(discs).sort().forEach((disc, i) => {
+                html += `
+                    <tr>
+                        <td>${i === 0 ? '<strong>' + year + '</strong>' : ''}</td>
+                        <td><span class="discipline-tag">${disc}</span></td>
+                        <td>${discs[disc]}</td>
+                    </tr>
+                `;
+            });
+        });
+
+        tbody.innerHTML = html || '<tr><td colspan="3">No data</td></tr>';
+    } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="3" style="color:red;">Error loading data</td></tr>';
+    }
+}
+
+async function loadShotDistribution() {
+    const discipline = document.getElementById('shot-discipline-select').value;
+    const tbody = document.getElementById('shot-dist-body');
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Loading...</td></tr>';
+
+    try {
+        const response = await fetch(`/api/report/shot-distribution?discipline=${discipline}`);
+        const data = await response.json();
+
+        const total = Object.values(data).reduce((a, b) => a + b, 0);
+        const order = ['V', 'X', '6', '5', '4', '3', '2', '1', '0'];
+
+        let html = '';
+        order.forEach(val => {
+            if (data[val]) {
+                const pct = (data[val] / total * 100).toFixed(1);
+                const width = data[val] / total * 400;
+                html += `
+                    <tr>
+                        <td><strong>${val}</strong></td>
+                        <td>${data[val].toLocaleString()} (${pct}%)</td>
+                        <td><div class="shot-bar" style="width: ${width}px;"></div></td>
+                    </tr>
+                `;
+            }
+        });
+
+        tbody.innerHTML = html || '<tr><td colspan="3">No data</td></tr>';
+    } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="3" style="color:red;">Error loading data</td></tr>';
+    }
+}
+</script>
+{% endblock %}

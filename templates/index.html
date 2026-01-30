@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}NRAA Results Database{% endblock %}
+
+{% block content %}
+<h1>NRAA Results Database</h1>
+
+<p>Select a state and year to view competition results.</p>
+
+<div class="grid">
+    {% for state in states %}
+    <div class="state-card">
+        <h3>{{ state.code }}</h3>
+        <p style="color: #666; margin: 5px 0;">{{ state.name }}</p>
+        <div class="year-links">
+            {% for year in state.years %}
+            <a href="/competition/{{ state.code }}/{{ year }}" class="year-link">{{ year }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

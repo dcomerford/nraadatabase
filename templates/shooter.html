@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}{{ shooter.first_name }} {{ shooter.last_name }} - NRAA Results{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Home</a> &raquo; Shooter Profile
+</div>
+
+<h1>{{ shooter.first_name }} {{ shooter.last_name }}</h1>
+<p style="color: #666;">
+    SID: {{ shooter.sid }} |
+    {% if shooter.pref_name %}Preferred: {{ shooter.pref_name }} | {% endif %}
+    Club: {{ shooter.club or 'No Club' }}
+</p>
+
+<div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin-bottom: 20px;">
+    <div class="card stat-box">
+        <div class="stat-value">{{ aggregates|length }}</div>
+        <div class="stat-label">Aggregate Results</div>
+    </div>
+    <div class="card stat-box">
+        <div class="stat-value">{{ aggregates|selectattr('place', 'eq', 1)|list|length }}</div>
+        <div class="stat-label">Wins</div>
+    </div>
+    <div class="card stat-box">
+        <div class="stat-value">{{ aggregates|selectattr('place', 'le', 3)|list|length }}</div>
+        <div class="stat-label">Podiums</div>
+    </div>
+    <div class="card stat-box">
+        <div class="stat-value">{{ shot_stats.values()|sum }}</div>
+        <div class="stat-label">Total Shots</div>
+    </div>
+</div>
+
+{% if shot_stats %}
+<div class="card">
+    <h2>Shot Distribution</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Shot Value</th>
+                <th>Count</th>
+                <th>Percentage</th>
+                <th>Distribution</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set total = shot_stats.values()|sum %}
+            {% for value in ['V', 'X', '6', '5', '4', '3', '2', '1', '0'] %}
+            {% if value in shot_stats %}
+            <tr>
+                <td><strong>{{ value }}</strong></td>
+                <td>{{ shot_stats[value] }}</td>
+                <td>{{ '%.1f'|format(shot_stats[value] / total * 100) }}%</td>
+                <td>
+                    <div class="shot-bar" style="width: {{ shot_stats[value] / total * 300 }}px;"></div>
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Aggregate Results History</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Year</th>
+                <th>State</th>
+                <th>Match</th>
+                <th>Discipline</th>
+                <th>Place</th>
+                <th>Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for agg in aggregates %}
+            <tr>
+                <td>{{ agg.year }}</td>
+                <td>{{ agg.state }}</td>
+                <td>{{ agg.match[:40] }}{% if agg.match|length > 40 %}...{% endif %}</td>
+                <td><span class="discipline-tag">{{ agg.discipline }}</span></td>
+                <td>
+                    {% if agg.place == 1 %}<span class="badge badge-gold">1st</span>
+                    {% elif agg.place == 2 %}<span class="badge badge-silver">2nd</span>
+                    {% elif agg.place == 3 %}<span class="badge badge-bronze">3rd</span>
+                    {% else %}{{ agg.place }}{% endif %}
+                </td>
+                <td><strong>{{ agg.score }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

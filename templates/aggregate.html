@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}{{ match_name }} - NRAA Results{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Home</a> &raquo;
+    <a href="/competition/{{ comp_info[0] }}/{{ comp_info[1] }}">{{ comp_info[0] }} {{ comp_info[1] }}</a> &raquo;
+    {{ match_name[:50] }}{% if match_name|length > 50 %}...{% endif %}
+</div>
+
+<h1>{{ match_name }}</h1>
+<p style="color: #666;">{{ comp_info[0] }} {{ comp_info[1] }}</p>
+
+<div class="tabs" id="discipline-tabs">
+    {% for discipline, res in results.items() %}
+    <div class="tab {% if loop.first %}active{% endif %}" data-discipline="{{ discipline }}">
+        {{ discipline }} ({{ res|length }})
+    </div>
+    {% endfor %}
+</div>
+
+{% for discipline, res in results.items() %}
+<div class="card discipline-content" data-discipline="{{ discipline }}" {% if not loop.first %}style="display:none"{% endif %}>
+    <h2>{{ discipline }}</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Place</th>
+                <th>Name</th>
+                <th>Club</th>
+                <th>State</th>
+                <th>Info</th>
+                <th>Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in res %}
+            <tr>
+                <td>
+                    {% if r.place == 1 %}<span class="badge badge-gold">1st</span>
+                    {% elif r.place == 2 %}<span class="badge badge-silver">2nd</span>
+                    {% elif r.place == 3 %}<span class="badge badge-bronze">3rd</span>
+                    {% else %}{{ r.place }}{% endif %}
+                </td>
+                <td><a href="/shooter/{{ r.sid }}">{{ r.first_name }} {{ r.last_name }}</a></td>
+                <td>{{ r.club or '-' }}</td>
+                <td>{{ r.state or '-' }}</td>
+                <td class="info-flags">{{ r.info or '' }}</td>
+                <td><strong>{{ r.score }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const disc = tab.dataset.discipline;
+
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        document.querySelectorAll('.discipline-content').forEach(content => {
+            content.style.display = content.dataset.discipline === disc ? 'block' : 'none';
+        });
+    });
+});
+</script>
+{% endblock %}

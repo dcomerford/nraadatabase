@@ -44,6 +44,38 @@ DISCIPLINE_GROUPS = {
     'Sporter': ['Sporter-Open', 'Sporter-PC'],
 }
 
+# MCSI (Mixed Category Score Index) parameters for 2025
+# Formula: MCSI = ((Score + Centres) × Multiplier) + Offset
+MCSI_PARAMS = {
+    'F-Open': {'multiplier': 1.42, 'offset': 1.8},
+    'F-Std-A': {'multiplier': 1.42, 'offset': 1.8},
+    'F-Std-B': {'multiplier': 1.42, 'offset': 1.8},
+    'F-Std-Open': {'multiplier': 1.42, 'offset': 1.8},
+    'FTR': {'multiplier': 1.42, 'offset': 1.8},
+    'TR-A': {'multiplier': 1.62, 'offset': 8.4},
+    'TR-B': {'multiplier': 1.62, 'offset': 8.4},
+    'TR-C': {'multiplier': 1.62, 'offset': 8.4},
+    'Sporter-Open': {'multiplier': 1.5, 'offset': 12},
+    'Sporter-PC': {'multiplier': 1.5, 'offset': 12},
+}
+
+
+def calculate_mcsi(score, discipline):
+    """Calculate MCSI from score and discipline."""
+    if score is None:
+        return None
+
+    normalized = normalize_discipline(discipline)
+    params = MCSI_PARAMS.get(normalized)
+
+    if not params:
+        return None
+
+    points = int(score)
+    centres = round((score % 1) * 10)
+    mcsi = ((points + centres) * params['multiplier']) + params['offset']
+    return round(mcsi, 2)
+
 
 def normalize_discipline(disc):
     """Normalize discipline name."""
@@ -369,6 +401,121 @@ def report_shot_distribution():
     ''', original_discs)
 
     results = {row[0]: row[1] for row in cur.fetchall()}
+    conn.close()
+    return jsonify(results)
+
+
+@app.route('/api/report/mcsi-leaderboard')
+def report_mcsi_leaderboard():
+    """MCSI leaderboard - top shooters across all disciplines."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    year = request.args.get('year', type=int)
+
+    # Get all string scores with disciplines
+    query = '''
+        SELECT sh.sid, sh.first_name, sh.last_name, cl.club_name,
+               st.discipline, st.score, c.year
+        FROM strings st
+        JOIN shooters sh ON st.shooter_sid = sh.sid
+        LEFT JOIN clubs cl ON sh.club_id = cl.club_id
+        JOIN competitions c ON st.competition_id = c.competition_id
+        WHERE st.score IS NOT NULL
+    '''
+    params = []
+
+    if year:
+        query += ' AND c.year = %s'
+        params.append(year)
+
+    cur.execute(query, params)
+
+    # Calculate MCSI for each score and aggregate by shooter
+    shooter_scores = {}
+    for sid, first, last, club, disc, score, yr in cur.fetchall():
+        mcsi = calculate_mcsi(score, disc)
+        if mcsi is None:
+            continue
+
+        if sid not in shooter_scores:
+            shooter_scores[sid] = {
+                'sid': sid,
+                'name': f"{first} {last}",
+                'club': club,
+                'scores': [],
+                'disciplines': set()
+            }
+        shooter_scores[sid]['scores'].append(mcsi)
+        shooter_scores[sid]['disciplines'].add(normalize_discipline(disc))
+
+    # Calculate averages and sort
+    results = []
+    for sid, data in shooter_scores.items():
+        if len(data['scores']) >= 5:  # Minimum 5 scores
+            avg_mcsi = sum(data['scores']) / len(data['scores'])
+            top_10_avg = sum(sorted(data['scores'], reverse=True)[:10]) / min(10, len(data['scores']))
+            results.append({
+                'sid': data['sid'],
+                'name': data['name'],
+                'club': data['club'],
+                'avg_mcsi': round(avg_mcsi, 2),
+                'top_10_avg': round(top_10_avg, 2),
+                'total_scores': len(data['scores']),
+                'disciplines': list(data['disciplines'])
+            })
+
+    results.sort(key=lambda x: x['top_10_avg'], reverse=True)
+    conn.close()
+    return jsonify(results[:100])
+
+
+@app.route('/api/report/mcsi-comparison')
+def report_mcsi_comparison():
+    """Compare a shooter's MCSI across disciplines."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    sid = request.args.get('sid', type=int)
+    if not sid:
+        return jsonify({'error': 'sid required'}), 400
+
+    cur.execute('''
+        SELECT st.discipline, st.score, c.year, s.code
+        FROM strings st
+        JOIN competitions c ON st.competition_id = c.competition_id
+        JOIN states s ON c.state_id = s.state_id
+        WHERE st.shooter_sid = %s AND st.score IS NOT NULL
+        ORDER BY c.year DESC, st.discipline;
+    ''', (sid,))
+
+    by_discipline = {}
+    for disc, score, year, state in cur.fetchall():
+        mcsi = calculate_mcsi(score, disc)
+        if mcsi is None:
+            continue
+
+        norm_disc = normalize_discipline(disc)
+        if norm_disc not in by_discipline:
+            by_discipline[norm_disc] = []
+        by_discipline[norm_disc].append({
+            'score': float(score),
+            'mcsi': mcsi,
+            'year': year,
+            'state': state
+        })
+
+    # Calculate stats per discipline
+    results = {}
+    for disc, scores in by_discipline.items():
+        mcsi_values = [s['mcsi'] for s in scores]
+        results[disc] = {
+            'count': len(scores),
+            'avg_mcsi': round(sum(mcsi_values) / len(mcsi_values), 2),
+            'best_mcsi': round(max(mcsi_values), 2),
+            'scores': scores[:20]  # Last 20 scores
+        }
+
     conn.close()
     return jsonify(results)
 

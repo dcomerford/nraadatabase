@@ -6,6 +6,42 @@
 <h1>Reports</h1>
 
 <div class="card">
+    <h2>MCSI Leaderboard</h2>
+    <p>Mixed Category Score Index - compare shooters across ALL disciplines (minimum 5 scores)</p>
+
+    <select id="mcsi-year-select">
+        <option value="">All Years</option>
+        <option value="2025">2025</option>
+        <option value="2024">2024</option>
+        <option value="2023">2023</option>
+        <option value="2022">2022</option>
+        <option value="2021">2021</option>
+        <option value="2020">2020</option>
+        <option value="2019">2019</option>
+        <option value="2018">2018</option>
+        <option value="2017">2017</option>
+    </select>
+    <button class="btn" onclick="loadMCSILeaderboard()">Load Report</button>
+
+    <table id="mcsi-table" style="margin-top: 20px;">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Club</th>
+                <th>Top 10 Avg</th>
+                <th>Overall Avg</th>
+                <th>Scores</th>
+                <th>Disciplines</th>
+            </tr>
+        </thead>
+        <tbody id="mcsi-body">
+            <tr><td colspan="7" style="text-align:center; color:#666;">Select year and click Load Report</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
     <h2>Top Shooters by Discipline</h2>
     <p>Grand Aggregate winners and podium finishes (minimum 3 entries)</p>
 
@@ -95,6 +131,37 @@
 
 {% block scripts %}
 <script>
+async function loadMCSILeaderboard() {
+    const year = document.getElementById('mcsi-year-select').value;
+    const tbody = document.getElementById('mcsi-body');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading... (this may take a moment)</td></tr>';
+
+    try {
+        const url = year ? `/api/report/mcsi-leaderboard?year=${year}` : '/api/report/mcsi-leaderboard';
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#666;">No data found</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.map((row, i) => `
+            <tr>
+                <td>${i + 1}</td>
+                <td><a href="/shooter/${row.sid}">${row.name}</a></td>
+                <td>${row.club || '-'}</td>
+                <td><strong>${row.top_10_avg}</strong></td>
+                <td>${row.avg_mcsi}</td>
+                <td>${row.total_scores}</td>
+                <td>${row.disciplines.map(d => '<span class="discipline-tag">' + d + '</span>').join(' ')}</td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color:red;">Error loading data</td></tr>';
+    }
+}
+
 async function loadTopShooters() {
     const discipline = document.getElementById('discipline-select').value;
     const tbody = document.getElementById('top-shooters-body');

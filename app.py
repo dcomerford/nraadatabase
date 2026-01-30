@@ -365,7 +365,7 @@ def event_mcsi(comp_id):
 
     comp_id, state_code, state_name, year = comp
 
-    # Get only Kings/Queens strings for this competition (not warmup events)
+    # Get only Kings/Queens strings for this competition (using pre-calculated flag)
     cur.execute('''
         SELECT st.string_id, sh.sid, sh.first_name, sh.last_name, cl.club_name,
                st.discipline, st.distance, st.distance_unit, st.score, st.match_name, st.shots_raw
@@ -373,9 +373,9 @@ def event_mcsi(comp_id):
         JOIN shooters sh ON st.shooter_sid = sh.sid
         LEFT JOIN clubs cl ON sh.club_id = cl.club_id
         WHERE st.competition_id = %s AND st.score IS NOT NULL
-          AND (st.match_name ILIKE %s OR st.match_name ILIKE %s)
+          AND st.is_kings_queens = TRUE
         ORDER BY sh.last_name, sh.first_name;
-    ''', (comp_id, '%kings%', '%queens%'))
+    ''', (comp_id,))
 
     # Calculate MCSI for each string
     all_strings = []

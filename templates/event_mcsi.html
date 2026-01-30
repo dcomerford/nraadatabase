@@ -58,6 +58,15 @@
 
 <div id="strings-tab" class="card" style="display: none;">
     <h2>Top 50 Individual Strings by MCSI</h2>
+
+    {% set has_conversions = top_strings|selectattr('converted')|list|length > 0 %}
+    {% if has_conversions %}
+    <p style="background: #fef3c7; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+        <strong>Note:</strong> Some Sporter scores were shot on 60-point targets and have been converted to 50s for MCSI calculation.
+        Converted scores shown in parentheses.
+    </p>
+    {% endif %}
+
     <table>
         <thead>
             <tr>
@@ -83,7 +92,13 @@
                 <td>{{ s.club or '-' }}</td>
                 <td><span class="discipline-tag">{{ s.discipline }}</span></td>
                 <td>{{ s.distance }}</td>
-                <td>{{ s.score }}</td>
+                <td>
+                    {% if s.converted %}
+                        {{ s.score }} <span style="color: #666;">(→{{ s.score_50 }})</span>
+                    {% else %}
+                        {{ s.score }}
+                    {% endif %}
+                </td>
                 <td><strong>{{ s.mcsi }}</strong></td>
             </tr>
             {% endfor %}

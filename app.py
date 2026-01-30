@@ -60,7 +60,42 @@ MCSI_PARAMS = {
 }
 
 
-def calculate_mcsi(score, discipline):
+def convert_60_to_50(score, shots_raw):
+    """Convert a score shot on 60-point target to 50-point equivalent.
+    X → V (centre), 6 → 5 (max score)
+    """
+    if score is None:
+        return None, None
+
+    if shots_raw:
+        # Count 6s to subtract from score
+        sixes = shots_raw.count('6')
+        # Convert shots: X→V, 6→5
+        converted_shots = shots_raw.replace('X', 'V').replace('6', '5')
+    else:
+        sixes = 0
+        converted_shots = shots_raw
+
+    # Subtract 1 point for each 6 (since 6→5)
+    points = int(score)
+    centres = round((score % 1) * 10)
+    converted_points = points - sixes
+    converted_score = converted_points + (centres / 10)
+
+    return round(converted_score, 2), converted_shots
+
+
+def needs_60_to_50_conversion(state_code, year, discipline):
+    """Check if this competition/discipline needs 60→50 conversion."""
+    # VRA 2025 Sporter disciplines were shot on 60s
+    if state_code == 'VRA' and year == 2025:
+        norm = normalize_discipline(discipline)
+        if 'Sporter' in norm:
+            return True
+    return False
+
+
+def calculate_mcsi(score, discipline, state_code=None, year=None, shots_raw=None):
     """Calculate MCSI from score and discipline."""
     if score is None:
         return None
@@ -70,6 +105,12 @@ def calculate_mcsi(score, discipline):
 
     if not params:
         return None
+
+    # Apply 60→50 conversion if needed
+    if state_code and year and needs_60_to_50_conversion(state_code, year, discipline):
+        score, _ = convert_60_to_50(score, shots_raw)
+        if score is None:
+            return None
 
     points = int(score)
     centres = round((score % 1) * 10)
@@ -327,7 +368,7 @@ def event_mcsi(comp_id):
     # Get all strings for this competition with scores
     cur.execute('''
         SELECT st.string_id, sh.sid, sh.first_name, sh.last_name, cl.club_name,
-               st.discipline, st.distance, st.distance_unit, st.score, st.match_name
+               st.discipline, st.distance, st.distance_unit, st.score, st.match_name, st.shots_raw
         FROM strings st
         JOIN shooters sh ON st.shooter_sid = sh.sid
         LEFT JOIN clubs cl ON sh.club_id = cl.club_id
@@ -338,8 +379,15 @@ def event_mcsi(comp_id):
     # Calculate MCSI for each string
     all_strings = []
     for row in cur.fetchall():
-        string_id, sid, first, last, club, disc, distance, unit, score, match_name = row
-        mcsi = calculate_mcsi(score, disc)
+        string_id, sid, first, last, club, disc, distance, unit, score, match_name, shots_raw = row
+
+        # Check if 60→50 conversion needed
+        needs_conversion = needs_60_to_50_conversion(state_code, year, disc)
+        display_score = score
+        if needs_conversion and shots_raw:
+            display_score, _ = convert_60_to_50(score, shots_raw)
+
+        mcsi = calculate_mcsi(score, disc, state_code, year, shots_raw)
         if mcsi:
             all_strings.append({
                 'string_id': string_id,
@@ -349,6 +397,8 @@ def event_mcsi(comp_id):
                 'discipline': normalize_discipline(disc),
                 'distance': f"{distance}{unit}" if distance else '',
                 'score': float(score),
+                'score_50': float(display_score) if display_score else None,
+                'converted': needs_conversion,
                 'mcsi': mcsi,
                 'match': match_name
             })
@@ -512,11 +562,12 @@ def report_mcsi_leaderboard():
     # Get all string scores with disciplines
     query = '''
         SELECT sh.sid, sh.first_name, sh.last_name, cl.club_name,
-               st.discipline, st.score, c.year
+               st.discipline, st.score, c.year, s.code, st.shots_raw
         FROM strings st
         JOIN shooters sh ON st.shooter_sid = sh.sid
         LEFT JOIN clubs cl ON sh.club_id = cl.club_id
         JOIN competitions c ON st.competition_id = c.competition_id
+        JOIN states s ON c.state_id = s.state_id
         WHERE st.score IS NOT NULL
     '''
     params = []
@@ -529,8 +580,8 @@ def report_mcsi_leaderboard():
 
     # Calculate MCSI for each score and aggregate by shooter
     shooter_scores = {}
-    for sid, first, last, club, disc, score, yr in cur.fetchall():
-        mcsi = calculate_mcsi(score, disc)
+    for sid, first, last, club, disc, score, yr, state_code, shots_raw in cur.fetchall():
+        mcsi = calculate_mcsi(score, disc, state_code, yr, shots_raw)
         if mcsi is None:
             continue
 

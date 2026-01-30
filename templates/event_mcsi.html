@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}{{ state_code }} {{ year }} - MCSI Rankings{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Home</a> &raquo;
+    <a href="/competition/{{ state_code }}/{{ year }}">{{ state_code }} {{ year }}</a> &raquo;
+    MCSI Rankings
+</div>
+
+<h1>{{ state_name }} {{ year }} - MCSI Rankings</h1>
+<p style="color: #666;">Cross-discipline comparison using Mixed Category Score Index</p>
+
+<div class="tabs">
+    <div class="tab active" onclick="showTab('shooters')">By Shooter</div>
+    <div class="tab" onclick="showTab('strings')">Top 50 Strings</div>
+</div>
+
+<div id="shooters-tab" class="card">
+    <h2>Shooter Rankings (by best MCSI)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Club</th>
+                <th>Best MCSI</th>
+                <th>Avg MCSI</th>
+                <th>Strings</th>
+                <th>Disciplines</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in shooters %}
+            <tr>
+                <td>
+                    {% if loop.index == 1 %}<span class="badge badge-gold">1</span>
+                    {% elif loop.index == 2 %}<span class="badge badge-silver">2</span>
+                    {% elif loop.index == 3 %}<span class="badge badge-bronze">3</span>
+                    {% else %}{{ loop.index }}{% endif %}
+                </td>
+                <td><a href="/shooter/{{ s.sid }}">{{ s.name }}</a></td>
+                <td>{{ s.club or '-' }}</td>
+                <td><strong>{{ s.best_mcsi }}</strong></td>
+                <td>{{ s.avg_mcsi }}</td>
+                <td>{{ s.shoots }}</td>
+                <td>
+                    {% for d in s.disciplines %}
+                    <span class="discipline-tag">{{ d }}</span>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div id="strings-tab" class="card" style="display: none;">
+    <h2>Top 50 Individual Strings by MCSI</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Club</th>
+                <th>Discipline</th>
+                <th>Distance</th>
+                <th>Score</th>
+                <th>MCSI</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in top_strings %}
+            <tr>
+                <td>
+                    {% if loop.index == 1 %}<span class="badge badge-gold">1</span>
+                    {% elif loop.index == 2 %}<span class="badge badge-silver">2</span>
+                    {% elif loop.index == 3 %}<span class="badge badge-bronze">3</span>
+                    {% else %}{{ loop.index }}{% endif %}
+                </td>
+                <td><a href="/shooter/{{ s.sid }}">{{ s.name }}</a></td>
+                <td>{{ s.club or '-' }}</td>
+                <td><span class="discipline-tag">{{ s.discipline }}</span></td>
+                <td>{{ s.distance }}</td>
+                <td>{{ s.score }}</td>
+                <td><strong>{{ s.mcsi }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.card[id$="-tab"]').forEach(c => c.style.display = 'none');
+
+    event.target.classList.add('active');
+    document.getElementById(tab + '-tab').style.display = 'block';
+}
+</script>
+{% endblock %}

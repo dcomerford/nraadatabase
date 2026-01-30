@@ -303,6 +303,102 @@ def reports():
     return render_template('reports.html')
 
 
+@app.route('/event/<int:comp_id>/mcsi')
+def event_mcsi(comp_id):
+    """Event page showing all shooters ranked by MCSI regardless of discipline."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Get competition info
+    cur.execute('''
+        SELECT c.competition_id, s.code, s.name, c.year
+        FROM competitions c
+        JOIN states s ON c.state_id = s.state_id
+        WHERE c.competition_id = %s;
+    ''', (comp_id,))
+
+    comp = cur.fetchone()
+    if not comp:
+        conn.close()
+        return "Competition not found", 404
+
+    comp_id, state_code, state_name, year = comp
+
+    # Get all strings for this competition with scores
+    cur.execute('''
+        SELECT st.string_id, sh.sid, sh.first_name, sh.last_name, cl.club_name,
+               st.discipline, st.distance, st.distance_unit, st.score, st.match_name
+        FROM strings st
+        JOIN shooters sh ON st.shooter_sid = sh.sid
+        LEFT JOIN clubs cl ON sh.club_id = cl.club_id
+        WHERE st.competition_id = %s AND st.score IS NOT NULL
+        ORDER BY sh.last_name, sh.first_name;
+    ''', (comp_id,))
+
+    # Calculate MCSI for each string
+    all_strings = []
+    for row in cur.fetchall():
+        string_id, sid, first, last, club, disc, distance, unit, score, match_name = row
+        mcsi = calculate_mcsi(score, disc)
+        if mcsi:
+            all_strings.append({
+                'string_id': string_id,
+                'sid': sid,
+                'name': f"{first} {last}",
+                'club': club,
+                'discipline': normalize_discipline(disc),
+                'distance': f"{distance}{unit}" if distance else '',
+                'score': float(score),
+                'mcsi': mcsi,
+                'match': match_name
+            })
+
+    # Sort by MCSI descending
+    all_strings.sort(key=lambda x: x['mcsi'], reverse=True)
+
+    # Also aggregate by shooter - best MCSI and average
+    shooter_stats = {}
+    for s in all_strings:
+        sid = s['sid']
+        if sid not in shooter_stats:
+            shooter_stats[sid] = {
+                'sid': sid,
+                'name': s['name'],
+                'club': s['club'],
+                'scores': [],
+                'disciplines': set()
+            }
+        shooter_stats[sid]['scores'].append(s['mcsi'])
+        shooter_stats[sid]['disciplines'].add(s['discipline'])
+
+    # Calculate stats
+    shooter_list = []
+    for sid, data in shooter_stats.items():
+        scores = data['scores']
+        shooter_list.append({
+            'sid': data['sid'],
+            'name': data['name'],
+            'club': data['club'],
+            'best_mcsi': max(scores),
+            'avg_mcsi': round(sum(scores) / len(scores), 2),
+            'shoots': len(scores),
+            'disciplines': sorted(data['disciplines'])
+        })
+
+    # Sort by best MCSI
+    shooter_list.sort(key=lambda x: x['best_mcsi'], reverse=True)
+
+    conn.close()
+
+    return render_template('event_mcsi.html',
+                           state_code=state_code,
+                           state_name=state_name,
+                           year=year,
+                           comp_id=comp_id,
+                           shooters=shooter_list,
+                           top_strings=all_strings[:50])
+
+
 @app.route('/api/report/top-shooters')
 def report_top_shooters():
     """Top shooters by discipline across years."""

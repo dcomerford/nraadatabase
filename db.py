@@ -4,9 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Use DATABASE_URL if set (for production), otherwise construct from password
-DATABASE_URL = os.getenv('DATABASE_URL') or \
-    f"postgresql://postgres.yyytxckmxrlyhscgbmor:{os.getenv('SUPABASE_DB_PASSWORD')}@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
+# DATABASE_URL takes precedence (production / overrides). Default to local nraadb.
+DATABASE_URL = os.getenv('DATABASE_URL') or 'postgresql:///nraadb'
 
 
 def get_connection():

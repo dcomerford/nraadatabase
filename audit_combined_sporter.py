@@ -12,7 +12,7 @@ from collections import defaultdict
 from statistics import mean, median
 from db import get_connection
 
-TOP_PCT = 0.20
+TOP_PCT = 0.40
 FLOOR_N = 5
 
 ORIGINAL = {

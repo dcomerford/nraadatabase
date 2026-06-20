@@ -13,7 +13,7 @@ from collections import defaultdict
 from statistics import mean
 from db import get_connection
 
-TOP_PCT = 0.20
+TOP_PCT = 0.40
 FLOOR_N = 5
 
 # Original 2014 linear formula
@@ -101,7 +101,7 @@ def main():
             per_class[cls].append((pts, cs))
 
     print('=' * 88)
-    print('HEAD TO HEAD — 22 comps, Sporter combined, top-20%/floor-5 cohort')
+    print('HEAD TO HEAD — 22 comps, Sporter combined, top-40%/floor-5 cohort')
     print('=' * 88)
     print()
 

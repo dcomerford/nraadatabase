@@ -25,7 +25,7 @@ LINEAR_PARAMS = {
     'Sporter-PC':   (1.50, 12.0),
 }
 
-TOP_PCT = 0.20
+TOP_PCT = 0.40
 FLOOR_N = 5
 
 

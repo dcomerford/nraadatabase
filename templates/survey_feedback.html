@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Set {{ idx }} feedback — MCSI Survey{% endblock %}
+{% block nav %}
+<nav><a href="/survey">MCSI Survey</a></nav>
+{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 1180px; margin: 30px auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#666;">
+        <span>{% if sid_name %}{{ sid_name }} &middot; {% endif %}Set {{ idx }} of {{ total }} &mdash; feedback</span>
+        <span>{{ (idx/total*100)|round }}%</span>
+    </div>
+    <div style="height:6px;background:#e2e8f0;border-radius:3px;margin:6px 0 18px;overflow:hidden;">
+        <div style="height:100%;background:#1a365d;width:{{ (idx/total*100)|round }}%;"></div>
+    </div>
+
+    <h2 style="margin:0 0 4px;">How did you compare?</h2>
+    <div style="color:#555;margin-bottom:18px;">
+        {{ set_info.match_name or 'Match' }} &middot; {{ set_info.competition_label }}
+        {% if set_info.distance %} &middot; {{ set_info.distance }} {{ set_info.distance_unit }}{% endif %}
+    </div>
+
+    {# Banners: agreement with each formula #}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;">
+        {% set pp = (peter_matches / n_items * 100)|round %}
+        <div style="background:{% if peter_matches == n_items %}#c6f6d5{% elif pp >= 60 %}#fefcbf{% else %}#fed7d7{% endif %};
+                    padding:12px;border-radius:6px;text-align:center;">
+            <div style="font-size:13px;color:#444;text-transform:uppercase;letter-spacing:0.5px;">vs Peter (June 13)</div>
+            <div style="font-size:26px;font-weight:700;color:#1a202c;">{{ peter_matches }}/{{ n_items }}</div>
+        </div>
+        {% set ap = (adrian_matches / n_items * 100)|round %}
+        <div style="background:{% if adrian_matches == n_items %}#c6f6d5{% elif ap >= 60 %}#fefcbf{% else %}#fed7d7{% endif %};
+                    padding:12px;border-radius:6px;text-align:center;">
+            <div style="font-size:13px;color:#444;text-transform:uppercase;letter-spacing:0.5px;">vs V4 (Adrian's current)</div>
+            <div style="font-size:26px;font-weight:700;color:#1a202c;">{{ adrian_matches }}/{{ n_items }}</div>
+        </div>
+        {% set vp = (v5_matches / n_items * 100)|round %}
+        <div style="background:{% if v5_matches == n_items %}#c6f6d5{% elif vp >= 60 %}#fefcbf{% else %}#fed7d7{% endif %};
+                    padding:12px;border-radius:6px;text-align:center;">
+            <div style="font-size:13px;color:#444;text-transform:uppercase;letter-spacing:0.5px;">vs V5 (proposed)</div>
+            <div style="font-size:26px;font-weight:700;color:#1a202c;">{{ v5_matches }}/{{ n_items }}</div>
+        </div>
+    </div>
+
+    {# Four-column comparison: Your | Peter | V4 | V5 #}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:18px;">
+        {# Your ranking #}
+        <div>
+            <h3 style="margin:0 0 8px;color:#1a365d;font-size:14px;">Your ranking</h3>
+            {% for it in user_order %}
+            <div style="display:flex;align-items:center;padding:7px 9px;
+                        background:#fff;border:1px solid #cbd5e0;border-radius:5px;margin-bottom:5px;font-size:12px;">
+                <span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;
+                             background:#1a365d;color:#fff;border-radius:50%;font-weight:700;margin-right:6px;flex:0 0 20px;font-size:11px;">
+                    {{ it.user_rank }}
+                </span>
+                <span style="flex:1;">
+                    <strong>{{ it.category }}</strong>
+                    <span style="color:#666;"> &middot; {{ '%g'|format(it.score) }}</span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {# Peter's #}
+        <div>
+            <h3 style="margin:0 0 8px;color:#1a365d;font-size:14px;">Peter's</h3>
+            {% for it in peter_order %}
+            <div style="display:flex;align-items:center;padding:7px 9px;
+                        background:{% if it.peter_match %}#f0fff4{% else %}#fff5f5{% endif %};
+                        border:1px solid {% if it.peter_match %}#9ae6b4{% else %}#feb2b2{% endif %};
+                        border-radius:5px;margin-bottom:5px;font-size:12px;">
+                <span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;
+                             background:#4a5568;color:#fff;border-radius:50%;font-weight:700;margin-right:6px;flex:0 0 20px;font-size:11px;">
+                    {{ it.peter_rank }}
+                </span>
+                <span style="flex:1;">
+                    <strong>{{ it.category }}</strong><br>
+                    <span style="color:#1a365d;font-weight:600;font-size:11px;">{{ '%.2f'|format(it.peter) }}</span>
+                </span>
+                {% if it.peter_match %}<span style="color:#2f855a;font-size:13px;">&check;</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {# V4 (Adrian's current) #}
+        <div>
+            <h3 style="margin:0 0 8px;color:#1a365d;font-size:14px;">V4 (current)</h3>
+            {% for it in adrian_order %}
+            <div style="display:flex;align-items:center;padding:7px 9px;
+                        background:{% if it.adrian_match %}#f0fff4{% else %}#fff5f5{% endif %};
+                        border:1px solid {% if it.adrian_match %}#9ae6b4{% else %}#feb2b2{% endif %};
+                        border-radius:5px;margin-bottom:5px;font-size:12px;">
+                <span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;
+                             background:#4a5568;color:#fff;border-radius:50%;font-weight:700;margin-right:6px;flex:0 0 20px;font-size:11px;">
+                    {{ it.adrian_rank }}
+                </span>
+                <span style="flex:1;">
+                    <strong>{{ it.category }}</strong><br>
+                    <span style="color:#1a365d;font-weight:600;font-size:11px;">{{ '%.2f'|format(it.adrian) }}</span>
+                </span>
+                {% if it.adrian_match %}<span style="color:#2f855a;font-size:13px;">&check;</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {# V5 (proposed) #}
+        <div>
+            <h3 style="margin:0 0 8px;color:#2f855a;font-size:14px;">V5 (proposed)</h3>
+            {% for it in v5_order %}
+            <div style="display:flex;align-items:center;padding:7px 9px;
+                        background:{% if it.v5_match %}#f0fff4{% else %}#fff5f5{% endif %};
+                        border:1px solid {% if it.v5_match %}#9ae6b4{% else %}#feb2b2{% endif %};
+                        border-radius:5px;margin-bottom:5px;font-size:12px;">
+                <span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;
+                             background:#2f855a;color:#fff;border-radius:50%;font-weight:700;margin-right:6px;flex:0 0 20px;font-size:11px;">
+                    {{ it.v5_rank if it.v5_rank is not none else '?' }}
+                </span>
+                <span style="flex:1;">
+                    <strong>{{ it.category }}</strong><br>
+                    <span style="color:#1a365d;font-weight:600;font-size:11px;">
+                        {% if it.v5 is not none %}{{ '%.2f'|format(it.v5) }}{% else %}—{% endif %}
+                    </span>
+                </span>
+                {% if it.v5_match %}<span style="color:#2f855a;font-size:13px;">&check;</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <form method="post" action="{{ url_for('survey_feedback', token=token, idx=idx) }}">
+        <button type="submit" class="btn" style="padding:12px 24px;font-size:16px;">
+            {% if is_last %}See overall results &rarr;{% else %}Next set &rarr;{% endif %}
+        </button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Rank {{ idx }} of {{ total }} — MCSI Survey{% endblock %}
+{% block nav %}
+<nav><a href="/survey">MCSI Survey</a></nav>
+{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 720px; margin: 30px auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#666;">
+        <span>{% if sid_name %}{{ sid_name }} &middot; {% endif %}Set {{ idx }} of {{ total }}</span>
+        <span>{{ ((idx-1)/total*100)|round }}% &rarr; {{ (idx/total*100)|round }}%</span>
+    </div>
+    <div style="height:6px;background:#e2e8f0;border-radius:3px;margin:6px 0 18px;overflow:hidden;">
+        <div style="height:100%;background:#1a365d;width:{{ ((idx-1)/total*100)|round }}%;"></div>
+    </div>
+
+    <h2 style="margin:0 0 4px;">{{ set_info.match_name or 'Match' }}</h2>
+    <div style="color:#555;margin-bottom:18px;">
+        {{ set_info.competition_label }}
+        {% if set_info.distance %} &middot; {{ set_info.distance }} {{ set_info.distance_unit }}{% endif %}
+    </div>
+
+    <p style="margin-bottom:12px;">
+        Drag the shoots into the order you think they should rank.
+        <strong>Top&nbsp;=&nbsp;best (1), bottom&nbsp;=&nbsp;least best.</strong>
+    </p>
+
+    <form id="rank-form" method="post"
+          action="{{ url_for('survey_rank', token=token, idx=idx) }}">
+        <input type="hidden" name="ranked_item_ids" id="ranked-ids">
+        <ul id="rank-list" style="list-style:none;padding:0;margin:0;">
+            {% for item in items %}
+            <li data-id="{{ item.item_id }}"
+                style="display:flex;align-items:center;padding:14px 16px;background:#fff;
+                       border:1px solid #cbd5e0;border-radius:6px;margin-bottom:8px;
+                       cursor:grab;user-select:none;
+                       box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                <span class="rank-num"
+                      style="display:inline-block;width:34px;height:34px;line-height:34px;
+                             text-align:center;background:#1a365d;color:#fff;border-radius:50%;
+                             font-weight:700;margin-right:14px;flex:0 0 34px;">?</span>
+                <span style="flex:1;">
+                    <strong style="font-size:16px;">{{ item.category }}</strong><br>
+                    <span style="color:#666;font-size:14px;">
+                        {{ item.distance }} {{ item.distance_unit }}
+                    </span>
+                </span>
+                <span style="font-size:22px;font-weight:700;color:#1a365d;letter-spacing:-0.5px;">
+                    {{ '%g'|format(item.score) }}
+                </span>
+                <span style="margin-left:14px;color:#a0aec0;font-size:20px;line-height:1;">&#x2630;</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <button type="submit" class="btn" id="submit-btn"
+                style="padding:12px 24px;font-size:16px;margin-top:18px;">
+            {% if idx == total %}Submit Final Ranking &rarr;{% else %}Next Set &rarr;{% endif %}
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+    const list = document.getElementById('rank-list');
+    const hidden = document.getElementById('ranked-ids');
+
+    function updateNumbers() {
+        const items = list.querySelectorAll('li');
+        const ids = [];
+        items.forEach((li, i) => {
+            li.querySelector('.rank-num').textContent = i + 1;
+            ids.push(li.dataset.id);
+        });
+        hidden.value = ids.join(',');
+    }
+
+    new Sortable(list, {
+        animation: 150,
+        ghostClass: 'rank-ghost',
+        onEnd: updateNumbers,
+    });
+    updateNumbers();
+
+    document.getElementById('rank-form').addEventListener('submit', updateNumbers);
+</script>
+<style>
+    .rank-ghost { opacity: 0.4; }
+    #rank-list li:active { cursor: grabbing; }
+</style>
+{% endblock %}

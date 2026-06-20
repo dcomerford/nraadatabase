@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Thanks — MCSI Survey{% endblock %}
+{% block nav %}
+<nav><a href="/survey">MCSI Survey</a></nav>
+{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 900px; margin: 50px auto; text-align:center;">
+    <h1 style="margin-top:0;">Thanks{% if sid_name %}, {{ sid_name }}{% endif %}!</h1>
+    <p style="font-size:17px;">
+        You ranked <strong>{{ total }}</strong> matches. Here's how you compared overall:
+    </p>
+
+    {% set peter_pct  = (peter_matches  / n_items * 100)|round if n_items else 0 %}
+    {% set adrian_pct = (adrian_matches / n_items * 100)|round if n_items else 0 %}
+    {% set v5_pct     = (v5_matches     / n_items * 100)|round if n_items else 0 %}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin:24px 0;">
+        <div style="background:#edf2f7;border-radius:8px;padding:18px;">
+            <div style="font-size:13px;color:#444;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">vs Peter (June 13)</div>
+            <div style="font-size:28px;font-weight:700;color:#1a365d;">{{ peter_matches }}/{{ n_items }}</div>
+            <div style="color:#4a5568;font-size:13px;">Positions matched ({{ peter_pct }}%)</div>
+            <div style="color:#4a5568;font-size:13px;margin-top:6px;">Avg diff: <strong>{{ '%.2f'|format(peter_avg_diff) }}</strong></div>
+        </div>
+        <div style="background:#edf2f7;border-radius:8px;padding:18px;">
+            <div style="font-size:13px;color:#444;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">vs V4 (current)</div>
+            <div style="font-size:28px;font-weight:700;color:#1a365d;">{{ adrian_matches }}/{{ n_items }}</div>
+            <div style="color:#4a5568;font-size:13px;">Positions matched ({{ adrian_pct }}%)</div>
+            <div style="color:#4a5568;font-size:13px;margin-top:6px;">Avg diff: <strong>{{ '%.2f'|format(adrian_avg_diff) }}</strong></div>
+        </div>
+        <div style="background:#e6fffa;border-radius:8px;padding:18px;border:1px solid #b2f5ea;">
+            <div style="font-size:13px;color:#444;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">vs V5 (proposed)</div>
+            <div style="font-size:28px;font-weight:700;color:#2f855a;">{{ v5_matches }}/{{ n_items }}</div>
+            <div style="color:#4a5568;font-size:13px;">Positions matched ({{ v5_pct }}%)</div>
+            <div style="color:#4a5568;font-size:13px;margin-top:6px;">Avg diff: <strong>{{ '%.2f'|format(v5_avg_diff) }}</strong></div>
+        </div>
+    </div>
+
+    <p style="color:#555;">
+        This survey is <strong>not run by the NRAA</strong> — it's an independent MCSI research project.
+        Keep an eye on this page for the outcome once we have enough responses{% if email %};
+        we'll also email the aggregate results to <strong>{{ email }}</strong>{% endif %}.
+    </p>
+    <p style="margin-top:30px;">
+        <a class="btn" href="/survey">Submit another response</a>
+    </p>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+*.xlsx
+*.pdf
+*.png
+*.csv
+Screenshot*
+.env
+.env.*
+flask.log

@@ -1,4 +1,8 @@
-from flask import Flask, render_template, request, jsonify
+import hashlib
+import re
+import secrets
+
+from flask import Flask, abort, redirect, render_template, request, url_for, jsonify
 from db import get_connection
 
 app = Flask(__name__)
@@ -129,7 +133,14 @@ def get_db():
 
 @app.route('/')
 def index():
-    """Home page with state/year selection."""
+    """Home page with state/year selection.
+
+    On the survey-only deployment (SURVEY_ONLY=1) the strings/competitions
+    tables don't exist, so redirect to the survey instead of crashing.
+    """
+    import os
+    if os.getenv('SURVEY_ONLY') == '1':
+        return redirect(url_for('survey_start'))
     conn = get_db()
     cur = conn.cursor()
 
@@ -666,6 +677,310 @@ def report_mcsi_comparison():
 
     conn.close()
     return jsonify(results)
+
+
+# ---------------------------------------------------------------------------
+# Survey: crowdsourced ranking of top K&Q scores across disciplines
+# ---------------------------------------------------------------------------
+
+SURVEY_SETS_PER_RESPONSE = 10
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def _hash_ip(ip):
+    if not ip:
+        return None
+    return hashlib.sha256(ip.encode('utf-8')).hexdigest()[:32]
+
+
+@app.route('/survey')
+@app.route('/survey/')
+def survey_start():
+    return render_template('survey_start.html')
+
+
+@app.route('/survey/start', methods=['POST'])
+def survey_begin():
+    sid_raw = (request.form.get('sid') or '').strip()
+    email = (request.form.get('email') or '').strip() or None
+
+    error = None
+    if not sid_raw.isdigit():
+        error = 'SID must be a number.'
+    if email and not EMAIL_RE.match(email):
+        error = 'Email looks invalid.'
+
+    sid = int(sid_raw) if sid_raw.isdigit() else None
+    sid_name = None
+    if sid is not None and error is None:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COALESCE(pref_name, first_name), last_name FROM shooters WHERE sid=%s",
+            (sid,),
+        )
+        row = cur.fetchone()
+        if not row:
+            error = f'SID {sid} not found in NRAA shooter list.'
+        else:
+            first, last = row
+            sid_name = f"{first or ''} {last or ''}".strip() or None
+        cur.close()
+        conn.close()
+
+    if error:
+        return render_template(
+            'survey_start.html',
+            error=error, sid=sid_raw, email=email or '',
+        ), 400
+
+    conn = get_connection()
+    cur = conn.cursor()
+    # Pick N random sets that have at least 3 items
+    cur.execute("""
+        SELECT s.set_id FROM survey_sets s
+        WHERE (SELECT COUNT(*) FROM survey_set_items i WHERE i.set_id = s.set_id) >= 3
+        ORDER BY random() LIMIT %s
+    """, (SURVEY_SETS_PER_RESPONSE,))
+    set_ids = [r[0] for r in cur.fetchall()]
+    if not set_ids:
+        cur.close(); conn.close()
+        return 'No survey sets configured yet — please try again later.', 503
+
+    token = secrets.token_urlsafe(16)
+    ip_hash = _hash_ip(request.headers.get('Fly-Client-IP') or request.remote_addr)
+    ua = (request.headers.get('User-Agent') or '')[:512]
+
+    cur.execute(
+        """INSERT INTO survey_responses
+              (token, sid, sid_name, email, set_ids, user_agent, ip_hash)
+           VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+        (token, sid, sid_name, email, set_ids, ua, ip_hash),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return redirect(url_for('survey_rank', token=token, idx=1))
+
+
+def _load_response(cur, token):
+    cur.execute(
+        """SELECT response_id, sid, sid_name, email, set_ids, completed_at
+           FROM survey_responses WHERE token=%s""", (token,),
+    )
+    row = cur.fetchone()
+    if not row:
+        abort(404)
+    return {
+        'response_id': row[0], 'sid': row[1], 'sid_name': row[2],
+        'email': row[3], 'set_ids': row[4], 'completed_at': row[5],
+    }
+
+
+@app.route('/survey/<token>/<int:idx>', methods=['GET', 'POST'])
+def survey_rank(token, idx):
+    conn = get_connection()
+    cur = conn.cursor()
+    resp = _load_response(cur, token)
+    total = len(resp['set_ids'])
+    if idx < 1 or idx > total:
+        cur.close(); conn.close()
+        abort(404)
+    set_id = resp['set_ids'][idx - 1]
+
+    if request.method == 'POST':
+        # Form sends ranked_item_ids = "12,4,7,9,15" (best → worst)
+        raw = request.form.get('ranked_item_ids', '')
+        try:
+            order = [int(x) for x in raw.split(',') if x.strip()]
+        except ValueError:
+            order = []
+        # Pull items (with adrian_v3, peter_score, v5_score) for ranking computation
+        cur.execute(
+            """SELECT item_id, adrian_v3, peter_score, v5_score
+               FROM survey_set_items WHERE set_id=%s""",
+            (set_id,),
+        )
+        items_rows = cur.fetchall()
+        valid = {r[0] for r in items_rows}
+        if not order or set(order) != valid:
+            cur.close(); conn.close()
+            return 'Invalid ranking submission — please go back and try again.', 400
+        # Compute ranks per formula (highest score → rank 1)
+        def ranks_by_score(rows, idx):
+            sorted_rows = sorted(rows, key=lambda r: -(float(r[idx]) if r[idx] is not None else -1))
+            return {r[0]: i+1 for i, r in enumerate(sorted_rows)}
+        adrian_rank_by_item = ranks_by_score(items_rows, 1)
+        peter_rank_by_item  = ranks_by_score(items_rows, 2)
+        v5_rank_by_item     = ranks_by_score(items_rows, 3)
+        # Replace any prior rankings for this (response, set)
+        cur.execute(
+            "DELETE FROM survey_rankings WHERE response_id=%s AND set_id=%s",
+            (resp['response_id'], set_id),
+        )
+        for rank_pos, item_id in enumerate(order, start=1):
+            cur.execute(
+                """INSERT INTO survey_rankings
+                      (response_id, set_id, item_id, rank, adrian_rank, peter_rank, v5_rank)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                (resp['response_id'], set_id, item_id, rank_pos,
+                 adrian_rank_by_item.get(item_id),
+                 peter_rank_by_item.get(item_id),
+                 v5_rank_by_item.get(item_id)),
+            )
+        conn.commit(); cur.close(); conn.close()
+        # Show the feedback page comparing user's order vs Adrian's
+        return redirect(url_for('survey_feedback', token=token, idx=idx))
+
+    # GET: fetch the set + items
+    cur.execute(
+        """SELECT competition_label, match_name, distance, distance_unit
+           FROM survey_sets WHERE set_id=%s""", (set_id,),
+    )
+    sr = cur.fetchone()
+    set_info = {
+        'competition_label': sr[0], 'match_name': sr[1],
+        'distance': sr[2], 'distance_unit': sr[3],
+    }
+    cur.execute(
+        """SELECT item_id, category, discipline, distance, distance_unit, score
+           FROM survey_set_items WHERE set_id=%s ORDER BY random()""",
+        (set_id,),
+    )
+    items = [
+        {'item_id': r[0], 'category': r[1], 'discipline': r[2],
+         'distance': r[3], 'distance_unit': r[4], 'score': float(r[5])}
+        for r in cur.fetchall()
+    ]
+    cur.close()
+    conn.close()
+    return render_template(
+        'survey_rank.html',
+        token=token, idx=idx, total=total,
+        set_info=set_info, items=items,
+        sid_name=resp['sid_name'],
+    )
+
+
+@app.route('/survey/<token>/<int:idx>/feedback', methods=['GET', 'POST'])
+def survey_feedback(token, idx):
+    """After ranking submit, show the user's order vs Adrian v3 order.
+    POST advances to the next set or to the done page."""
+    conn = get_connection()
+    cur = conn.cursor()
+    resp = _load_response(cur, token)
+    total = len(resp['set_ids'])
+    if idx < 1 or idx > total:
+        cur.close(); conn.close()
+        abort(404)
+    set_id = resp['set_ids'][idx - 1]
+
+    if request.method == 'POST':
+        # Advance
+        if idx == total:
+            cur.execute(
+                "UPDATE survey_responses SET completed_at=NOW() WHERE response_id=%s",
+                (resp['response_id'],),
+            )
+            conn.commit(); cur.close(); conn.close()
+            return redirect(url_for('survey_done', token=token))
+        conn.commit(); cur.close(); conn.close()
+        return redirect(url_for('survey_rank', token=token, idx=idx + 1))
+
+    # GET: pull set + the user's rankings + Adrian's
+    cur.execute(
+        """SELECT competition_label, match_name, distance, distance_unit
+           FROM survey_sets WHERE set_id=%s""", (set_id,),
+    )
+    sr = cur.fetchone()
+    set_info = {
+        'competition_label': sr[0], 'match_name': sr[1],
+        'distance': sr[2], 'distance_unit': sr[3],
+    }
+    cur.execute(
+        """SELECT i.item_id, i.category, i.discipline,
+                  i.distance, i.distance_unit, i.score, i.centres,
+                  i.adrian_v3, i.peter_score, i.v5_score,
+                  r.rank, r.adrian_rank, r.peter_rank, r.v5_rank
+           FROM survey_set_items i
+           JOIN survey_rankings r
+             ON r.item_id = i.item_id
+            AND r.response_id = %s
+            AND r.set_id = %s
+           WHERE i.set_id = %s""",
+        (resp['response_id'], set_id, set_id),
+    )
+    rows = cur.fetchall()
+    items = [{
+        'item_id': r[0], 'category': r[1], 'discipline': r[2],
+        'distance': r[3], 'distance_unit': r[4],
+        'score': float(r[5]), 'centres': r[6],
+        'adrian': float(r[7]) if r[7] is not None else None,
+        'peter':  float(r[8]) if r[8] is not None else None,
+        'v5':     float(r[9]) if r[9] is not None else None,
+        'user_rank': r[10], 'adrian_rank': r[11], 'peter_rank': r[12], 'v5_rank': r[13],
+        'adrian_match': r[10] == r[11],
+        'peter_match':  r[10] == r[12],
+        'v5_match':     r[10] == r[13],
+    } for r in rows]
+    user_order   = sorted(items, key=lambda x: x['user_rank'])
+    adrian_order = sorted(items, key=lambda x: x['adrian_rank'])
+    peter_order  = sorted(items, key=lambda x: x['peter_rank'])
+    v5_order     = sorted(items, key=lambda x: (x['v5_rank'] if x['v5_rank'] is not None else 99))
+    adrian_matches = sum(1 for it in items if it['adrian_match'])
+    peter_matches  = sum(1 for it in items if it['peter_match'])
+    v5_matches     = sum(1 for it in items if it['v5_match'])
+    cur.close(); conn.close()
+    return render_template(
+        'survey_feedback.html',
+        token=token, idx=idx, total=total,
+        set_info=set_info,
+        user_order=user_order,
+        adrian_order=adrian_order, peter_order=peter_order, v5_order=v5_order,
+        n_items=len(items),
+        adrian_matches=adrian_matches, peter_matches=peter_matches, v5_matches=v5_matches,
+        sid_name=resp['sid_name'],
+        is_last=(idx == total),
+    )
+
+
+@app.route('/survey/<token>/done')
+def survey_done(token):
+    conn = get_connection()
+    cur = conn.cursor()
+    resp = _load_response(cur, token)
+    # Overall agreement stats vs both formulas
+    cur.execute(
+        """SELECT COUNT(*),
+                  COUNT(*) FILTER (WHERE rank = adrian_rank),
+                  AVG(ABS(rank - adrian_rank))::numeric(8,2),
+                  COUNT(*) FILTER (WHERE rank = peter_rank),
+                  AVG(ABS(rank - peter_rank))::numeric(8,2),
+                  COUNT(*) FILTER (WHERE rank = v5_rank),
+                  AVG(ABS(rank - v5_rank))::numeric(8,2),
+                  COUNT(DISTINCT set_id)
+           FROM survey_rankings
+           WHERE response_id = %s AND adrian_rank IS NOT NULL""",
+        (resp['response_id'],),
+    )
+    (n_items, adrian_matches, adrian_avg_diff,
+     peter_matches, peter_avg_diff,
+     v5_matches, v5_avg_diff, n_sets) = cur.fetchone()
+    cur.close()
+    conn.close()
+    return render_template(
+        'survey_done.html',
+        sid_name=resp['sid_name'], email=resp['email'],
+        total=len(resp['set_ids']),
+        n_items=n_items or 0,
+        adrian_matches=adrian_matches or 0,
+        adrian_avg_diff=float(adrian_avg_diff) if adrian_avg_diff else 0.0,
+        peter_matches=peter_matches or 0,
+        peter_avg_diff=float(peter_avg_diff) if peter_avg_diff else 0.0,
+        v5_matches=v5_matches or 0,
+        v5_avg_diff=float(v5_avg_diff) if v5_avg_diff else 0.0,
+        n_sets=n_sets or 0,
+    )
 
 
 if __name__ == '__main__':
